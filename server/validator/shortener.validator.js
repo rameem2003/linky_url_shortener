@@ -1,6 +1,6 @@
-import { z } from "zod";
+import z from "zod";
 
-export const linkShortener = z.Schema({
+export const linkShortenerSchema = z.object({
   url: z
     .string({ required_error: "Please Enter the url" })
     .trim()

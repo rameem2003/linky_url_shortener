@@ -13,6 +13,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(requestIp.mw());
 app.use(verifyAuthentication);
+app.set("view engine", "ejs");
 
 // Route connect
 app.use(router);

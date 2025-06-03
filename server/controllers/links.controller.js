@@ -1,67 +1,125 @@
-import { insertLink, loadLinks } from "../services/links.service.js";
+import {
+  deleteShortLink,
+  getAllLinks,
+  getShortLinkByShortCode,
+  insertShortLink,
+  updateShortLink,
+} from "../services/links.service.js";
+import { linkShortenerSchema } from "../validator/shortener.validator.js";
 import crypto from "crypto";
 
-/**
- * Get All Links
- */
-const getAllLinks = async (req, res) => {
+// get all short links
+export const getAllShortLinks = async (req, res) => {
   try {
-    let links = await loadLinks();
+    const shortLinks = await getAllLinks({ userId: req.user.id });
 
-    res.status(200).send({
-      success: true,
-      message: "Links loaded successfully",
-      data: links,
-    });
+    return res.status(200).json({ success: true, data: shortLinks });
   } catch (error) {
-    res.status(500).send({ success: false, message: error });
+    return res.status(500).json({ success: false, msg: error.message });
   }
 };
 
-/**
- * Insert Link
- */
-const addLink = async (req, res) => {
-  const { link, shortCode } = req.body;
-
-  if (!link && !shortCode) {
-    return res
-      .status(400)
-      .send({ success: false, message: "Link is required" });
-  }
-
-  let finalShortCode = shortCode || crypto.randomBytes(4).toString("hex");
-
+// insert short link
+export const postShortLink = async (req, res) => {
   try {
-    let result = await insertLink(link, finalShortCode);
+    const { url, shortCode } = req.body;
 
-    res.status(200).send({
-      success: true,
-      message: "Link added successfully",
-      data: result,
-    });
-  } catch (error) {
-    res.status(500).send({ success: false, message: error });
-  }
-};
+    // validate user data
+    const { data, error } = linkShortenerSchema.safeParse({ url, shortCode });
 
-/**
- * Redirect Link
- */
-const linkRedirect = async (req, res) => {
-  const { shortCode } = req.params;
+    if (error)
+      return res
+        .status(400)
+        .json({ success: false, msg: error.errors[0].message });
 
-  try {
-    let link = await findLink(shortCode);
+    const finalShortCode =
+      data.shortCode || crypto.randomBytes(4).toString("hex");
 
-    if (link.length > 0) {
-      res.redirect(link[0].link);
-    } else {
-      res.status(404).send({ success: false, message: "Link not found" });
+    // check short code
+    const shortCodeExist = await getShortLinkByShortCode(finalShortCode);
+
+    if (shortCodeExist) {
+      return res
+        .status(400)
+        .json({ success: false, msg: "Short code already exist" });
     }
+
+    // insert short link
+    await insertShortLink(data.url, finalShortCode, req.user.id);
+
+    return res
+      .status(200)
+      .json({ success: true, msg: "Short link created successfully" });
   } catch (error) {
-    res.status(500).send({ success: false, message: error });
+    return res.status(500).json({ success: false, msg: error.message });
   }
 };
 
-export { getAllLinks, addLink, linkRedirect };
+// redirect short link
+export const redirectShortLink = async (req, res) => {
+  try {
+    const { shortCode } = req.params;
+
+    // find short link
+    const link = await getShortLinkByShortCode(shortCode);
+
+    if (!link) {
+      return res.status(404).json({ success: false, msg: "Link not found" });
+    }
+
+    return res.redirect(link.url);
+  } catch (error) {
+    return res.status(500).json({ success: false, msg: error.message });
+  }
+};
+
+// update short link
+export const updateTheShortLink = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { url, shortCode } = req.body;
+
+    // validate user data
+    const { data, error } = linkShortenerSchema.safeParse({ url, shortCode });
+
+    if (error)
+      return res
+        .status(400)
+        .json({ success: false, msg: error.errors[0].message });
+
+    const shortCodeExist = await getShortLinkByShortCode(data.shortCode);
+
+    if (shortCodeExist) {
+      return res
+        .status(400)
+        .json({ success: false, msg: "Short code already exist" });
+    }
+
+    const newShortCode = await updateShortLink(id, data.url, data.shortCode);
+
+    if (!newShortCode) {
+      return res.status(404).json({ success: false, msg: "Link not found" });
+    }
+
+    return res
+      .status(200)
+      .json({ success: true, msg: "Short link updated successfully" });
+  } catch (error) {
+    return res.status(500).json({ success: false, msg: error.message });
+  }
+};
+
+// delete the short link
+export const deleteTheShortLink = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await deleteShortLink(id);
+
+    return res
+      .status(200)
+      .json({ success: true, msg: "Short link deleted successfully" });
+  } catch (error) {
+    return res.status(500).json({ success: false, msg: error.message });
+  }
+};
