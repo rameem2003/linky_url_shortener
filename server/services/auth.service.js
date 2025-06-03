@@ -1,13 +1,17 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import db from "../config/db.js";
-import { sessionsTable, usersTable } from "../drizzle/schema.js";
+import {
+  sessionsTable,
+  usersTable,
+  verifyEmailTokensTable,
+} from "../drizzle/schema.js";
 import {
   ACCESS_TOKEN_EXPIRY,
   MILLISECONDS_PER_SECOND,
   REFRESH_TOKEN_EXPIRY,
 } from "../config/constants.js";
-import { eq } from "drizzle-orm";
+import { eq, lt, sql } from "drizzle-orm";
 
 // get user by email
 export const getUserByEmail = async (email) => {
@@ -44,9 +48,37 @@ export const hashPassword = async (password) => {
   return await bcrypt.hash(password, 10);
 };
 
+// update password
+export const updatePassword = async (userId, password) => {
+  let newPassword = await hashPassword(password);
+  return await db
+    .update(usersTable)
+    .set({ password: newPassword })
+    .where(eq(usersTable.id, userId));
+};
+
 // verify password
 export const verifyPassword = async (password, hashedPassword) => {
   return await bcrypt.compare(password, hashedPassword);
+};
+
+// generate random code
+export const generateRandomCode = () => {
+  return Math.floor(100000 + Math.random() * 900000);
+};
+
+// insert random Code
+export const insertRandomCode = async (userId, token) => {
+  await db
+    .delete(verifyEmailTokensTable)
+    .where(lt(verifyEmailTokensTable.expiresAt, sql`(CURRENT_TIMESTAMP)`));
+  await db.insert(verifyEmailTokensTable).values({ userId, token });
+};
+
+// create email link
+export const createEmailLink = (email, token) => {
+  const encodedEmail = encodeURIComponent(email);
+  return `http://localhost:5000/verify-email/?token=${token}&email=${encodedEmail}`;
 };
 
 // create login session

@@ -32,6 +32,15 @@ CREATE TABLE `users` (
 	CONSTRAINT `users_email_unique` UNIQUE(`email`)
 );
 --> statement-breakpoint
-DROP TABLE `links`;--> statement-breakpoint
+CREATE TABLE `verify_email_tokens` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`userId` int NOT NULL,
+	`token` varchar(8) NOT NULL,
+	`expires_at` timestamp NOT NULL DEFAULT (CURRENT_TIMESTAMP + INTERVAL 1 DAY),
+	`created_at` timestamp NOT NULL DEFAULT (now()),
+	CONSTRAINT `verify_email_tokens_id` PRIMARY KEY(`id`)
+);
+--> statement-breakpoint
 ALTER TABLE `sessions` ADD CONSTRAINT `sessions_userId_users_id_fk` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE `short_link` ADD CONSTRAINT `short_link_userId_users_id_fk` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;
+ALTER TABLE `short_link` ADD CONSTRAINT `short_link_userId_users_id_fk` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `verify_email_tokens` ADD CONSTRAINT `verify_email_tokens_userId_users_id_fk` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE cascade ON UPDATE no action;

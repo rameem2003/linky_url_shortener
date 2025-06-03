@@ -1,14 +1,21 @@
 import {
   authenticateUser,
   clearUserSession,
+  createEmailLink,
   createUser,
+  findUserById,
+  generateRandomCode,
   getUserByEmail,
   hashPassword,
+  insertRandomCode,
+  updatePassword,
   verifyPassword,
 } from "../services/auth.service.js";
+import { getAllLinks } from "./../services/links.service.js";
 import {
   loginUserSchema,
   registerUserSchema,
+  verifyPasswordSchema,
 } from "../validator/auth.validator.js";
 
 // register
@@ -75,8 +82,93 @@ export const login = async (req, res) => {
     .json({ success: true, msg: "User logged in successfully" });
 };
 
+// get user profile
+export const getUserProfile = async (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ success: false, msg: "Unauthorized" });
+  }
+  try {
+    const user = await findUserById(req.user.id);
+    const allShortLinks = await getAllLinks({ userId: req.user.id });
+    if (!user) {
+      return res.status(404).json({ success: false, msg: "User not found" });
+    }
+    return res.status(200).json({
+      success: true,
+      data: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        isEmailValid: user.isEmailValid,
+        hasPassword: Boolean(user.password),
+        avatarUrl: user.avatarUrl,
+        createdAt: user.createdAt,
+        links: allShortLinks,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, msg: error.message });
+  }
+};
+
+// update user password
+export const updateUserPassword = async (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ success: false, msg: "Unauthorized" });
+  }
+
+  const { data, error } = verifyPasswordSchema.safeParse(req.body);
+
+  if (error) {
+    return res
+      .status(400)
+      .json({ success: false, msg: error.errors[0].message });
+  }
+
+  try {
+    const user = await findUserById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({ success: false, msg: "User not found" });
+    }
+
+    const isPasswordValid = await verifyPassword(
+      data.currentPassword,
+      user.password
+    );
+
+    if (!isPasswordValid) {
+      return res
+        .status(400)
+        .json({ success: false, msg: "Invalid Credentials" });
+    }
+
+    await updatePassword(req.user.id, data.newPassword);
+    return res
+      .status(200)
+      .json({ success: true, msg: "Password updated successfully" });
+  } catch (error) {
+    return res.status(500).json({ success: false, msg: error.message });
+  }
+};
+
+// user verify email
+export const sendEmailForVerification = async (req, res) => {
+  if (!req.user || req.user.isEmailValid) {
+    return res.status(401).json({ success: false, msg: "Unauthorized" });
+  }
+
+  const randomCode = generateRandomCode();
+
+  await insertRandomCode(req.user.id, randomCode);
+  let emailLink = createEmailLink(req.user.email, randomCode);
+};
+
 // logout user
 export const logout = async (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ success: false, msg: "Unauthorized" });
+  }
   await clearUserSession(req.user.sessionId);
   res.clearCookie("access_token");
   res.clearCookie("refresh_token");

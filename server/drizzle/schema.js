@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   int,
@@ -43,6 +43,19 @@ export const sessionsTable = mysqlTable("sessions", {
   ip: varchar({ length: 255 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+// verify email tokens table
+export const verifyEmailTokensTable = mysqlTable("verify_email_tokens", {
+  id: int().autoincrement().primaryKey(),
+  userId: int()
+    .notNull()
+    .references(() => usersTable.id, { onDelete: "cascade" }),
+  token: varchar({ length: 8 }).notNull(),
+  expiresAt: timestamp("expires_at")
+    .default(sql`(CURRENT_TIMESTAMP + INTERVAL 1 DAY)`)
+    .notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // A user can have many short link & sessions
