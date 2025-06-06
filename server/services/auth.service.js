@@ -11,7 +11,7 @@ import {
   MILLISECONDS_PER_SECOND,
   REFRESH_TOKEN_EXPIRY,
 } from "../config/constants.js";
-import { eq, lt, sql } from "drizzle-orm";
+import { and, eq, gte, lt, sql } from "drizzle-orm";
 
 // get user by email
 export const getUserByEmail = async (email) => {
@@ -69,16 +69,70 @@ export const generateRandomCode = () => {
 
 // insert random Code
 export const insertRandomCode = async (userId, token) => {
-  await db
-    .delete(verifyEmailTokensTable)
-    .where(lt(verifyEmailTokensTable.expiresAt, sql`(CURRENT_TIMESTAMP)`));
-  await db.insert(verifyEmailTokensTable).values({ userId, token });
+  db.transaction(async (tx) => {
+    try {
+      await tx
+        .delete(verifyEmailTokensTable)
+        .where(eq(verifyEmailTokensTable.userId, userId));
+      await tx
+        .delete(verifyEmailTokensTable)
+        .where(lt(verifyEmailTokensTable.expiresAt, sql`(CURRENT_TIMESTAMP)`));
+      await tx.insert(verifyEmailTokensTable).values({ userId, token });
+    } catch (error) {
+      throw new Error(error);
+    }
+  });
 };
 
 // create email link
 export const createEmailLink = (email, token) => {
   const encodedEmail = encodeURIComponent(email);
-  return `http://localhost:5000/verify-email/?token=${token}&email=${encodedEmail}`;
+  return `http://localhost:5000/api/v1/auth/verify-email/?token=${token}&email=${encodedEmail}`;
+};
+
+// find verify email token
+export const findVerificationEmailToken = async (email, token) => {
+  const tokenData = await db
+    .select({
+      userId: verifyEmailTokensTable.userId,
+      token: verifyEmailTokensTable.token,
+      expiresAt: verifyEmailTokensTable.expiresAt,
+    })
+    .from(verifyEmailTokensTable)
+    .where(
+      and(
+        eq(verifyEmailTokensTable.token, token),
+        gte(verifyEmailTokensTable.expiresAt, sql`(CURRENT_TIMESTAMP)`)
+      )
+    );
+
+  if (!tokenData.length) {
+    return null;
+  }
+  const { userId } = tokenData[0];
+
+  const user = await findUserById(userId);
+
+  if (!user) {
+    return null;
+  }
+
+  return user;
+};
+
+// find user and update verify status
+export const findUserAndUpdateEmailValidation = async (email) => {
+  return db
+    .update(usersTable)
+    .set({ isEmailValid: true })
+    .where(eq(usersTable.email, email));
+};
+
+// clear tokens table
+export const clearTokensTable = (userId) => {
+  return db
+    .delete(verifyEmailTokensTable)
+    .where(eq(verifyEmailTokensTable.userId, userId));
 };
 
 // create login session

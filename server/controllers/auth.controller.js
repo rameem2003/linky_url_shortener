@@ -1,9 +1,12 @@
 import {
   authenticateUser,
+  clearTokensTable,
   clearUserSession,
   createEmailLink,
   createUser,
+  findUserAndUpdateEmailValidation,
   findUserById,
+  findVerificationEmailToken,
   generateRandomCode,
   getUserByEmail,
   hashPassword,
@@ -15,8 +18,10 @@ import { getAllLinks } from "./../services/links.service.js";
 import {
   loginUserSchema,
   registerUserSchema,
+  verifyEmailTokenSchema,
   verifyPasswordSchema,
 } from "../validator/auth.validator.js";
+import { sendEmail } from "../utils/sendEmail.js";
 
 // register
 export const register = async (req, res) => {
@@ -162,6 +167,32 @@ export const sendEmailForVerification = async (req, res) => {
 
   await insertRandomCode(req.user.id, randomCode);
   let emailLink = createEmailLink(req.user.email, randomCode);
+
+  let emailBody = `
+    <p>Click the link below to verify your email:</p>
+    <a href="${emailLink}">${emailLink}</a> or copy and paste it this code <b>${randomCode}</b> into your browser.`;
+
+  await sendEmail(req.user.email, "Email Verification", emailBody);
+  res.status(200).json({ success: true, data: emailLink });
+};
+
+// verify email token
+export const verifyEmailToken = async (req, res) => {
+  const { token, email } = req.query;
+  console.log(req.query);
+
+  const { data, error } = verifyEmailTokenSchema.safeParse({ token, email });
+
+  if (error)
+    return res
+      .status(400)
+      .json({ success: false, msg: "Invalid token or email" });
+
+  const validate = await findVerificationEmailToken(data.email, data.token);
+
+  await findUserAndUpdateEmailValidation(validate.email);
+  await clearTokensTable(validate.id);
+  res.status(200).json({ success: true, msg: "Email verified successfully" });
 };
 
 // logout user
