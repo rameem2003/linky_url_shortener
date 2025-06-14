@@ -5,6 +5,7 @@ import {
   createEmailLink,
   createUser,
   findUserAndUpdateEmailValidation,
+  findUserAndUpdateName,
   findUserById,
   findVerificationEmailToken,
   generateRandomCode,
@@ -20,6 +21,7 @@ import {
   registerUserSchema,
   verifyEmailTokenSchema,
   verifyPasswordSchema,
+  verifyUserNameSchema,
 } from "../validator/auth.validator.js";
 import { sendEmail } from "../utils/sendEmail.js";
 
@@ -116,6 +118,25 @@ export const getUserProfile = async (req, res) => {
   }
 };
 
+// edit profile
+export const editProfile = async (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ success: false, msg: "Unauthorized" });
+  }
+
+  const { data, error } = verifyUserNameSchema.safeParse(req.body);
+  if (error) {
+    return res
+      .status(400)
+      .json({ success: false, msg: error.errors[0].message });
+  }
+  await findUserAndUpdateName(req.user.id, data.name);
+
+  return res
+    .status(200)
+    .json({ success: true, msg: "User name updated successfully" });
+};
+
 // update user password
 export const updateUserPassword = async (req, res) => {
   if (!req.user) {
@@ -179,7 +200,6 @@ export const sendEmailForVerification = async (req, res) => {
 // verify email token
 export const verifyEmailToken = async (req, res) => {
   const { token, email } = req.query;
-  console.log(req.query);
 
   const { data, error } = verifyEmailTokenSchema.safeParse({ token, email });
 
@@ -188,10 +208,16 @@ export const verifyEmailToken = async (req, res) => {
       .status(400)
       .json({ success: false, msg: "Invalid token or email" });
 
-  const validate = await findVerificationEmailToken(data.email, data.token);
+  const [validate] = await findVerificationEmailToken(data.email, data.token);
+
+  if (!validate) {
+    return res
+      .status(400)
+      .json({ success: false, msg: "Invalid token or email" });
+  }
 
   await findUserAndUpdateEmailValidation(validate.email);
-  await clearTokensTable(validate.id);
+  await clearTokensTable(validate.userId);
   res.status(200).json({ success: true, msg: "Email verified successfully" });
 };
 

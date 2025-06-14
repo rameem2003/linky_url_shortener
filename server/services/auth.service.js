@@ -86,38 +86,39 @@ export const insertRandomCode = async (userId, token) => {
 
 // create email link
 export const createEmailLink = (email, token) => {
-  const encodedEmail = encodeURIComponent(email);
-  return `http://localhost:5000/api/v1/auth/verify-email/?token=${token}&email=${encodedEmail}`;
+  const url = new URL(`http://localhost:5000/api/v1/auth/verify-email`);
+
+  url.searchParams.append("token", token);
+  url.searchParams.append("email", email);
+
+  return url.toString();
+  // const encodedEmail = encodeURIComponent(email);
+  // return `http://localhost:5000/api/v1/auth/verify-email/?token=${token}&email=${encodedEmail}`;
 };
 
 // find verify email token
 export const findVerificationEmailToken = async (email, token) => {
-  const tokenData = await db
+  return await db
     .select({
-      userId: verifyEmailTokensTable.userId,
+      userId: usersTable.id,
+      email: usersTable.email,
       token: verifyEmailTokensTable.token,
       expiresAt: verifyEmailTokensTable.expiresAt,
     })
     .from(verifyEmailTokensTable)
     .where(
       and(
+        eq(usersTable.email, email),
         eq(verifyEmailTokensTable.token, token),
         gte(verifyEmailTokensTable.expiresAt, sql`(CURRENT_TIMESTAMP)`)
       )
-    );
+    )
+    .innerJoin(usersTable, eq(verifyEmailTokensTable.userId, usersTable.id));
+};
 
-  if (!tokenData.length) {
-    return null;
-  }
-  const { userId } = tokenData[0];
-
-  const user = await findUserById(userId);
-
-  if (!user) {
-    return null;
-  }
-
-  return user;
+// find user and update user name
+export const findUserAndUpdateName = async (userId, name) => {
+  return db.update(usersTable).set({ name }).where(eq(usersTable.id, userId));
 };
 
 // find user and update verify status

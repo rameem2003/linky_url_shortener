@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  editProfile,
   getUserProfile,
   login,
   logout,
@@ -14,6 +15,7 @@ const router = Router();
 router.post("/auth/register", register);
 router.post("/auth/login", login);
 router.get("/auth/profile", getUserProfile);
+router.patch("/auth/update-username", editProfile);
 router.patch("/auth/update-password", updateUserPassword);
 router.post("/auth/send-verification-email", sendEmailForVerification);
 router.get("/auth/verify-email", verifyEmailToken);
