@@ -2,6 +2,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import db from "../config/db.js";
 import {
+  passwordResetTokensTable,
   sessionsTable,
   usersTable,
   verifyEmailTokensTable,
@@ -12,6 +13,7 @@ import {
   REFRESH_TOKEN_EXPIRY,
 } from "../config/constants.js";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
+import crypto from "crypto";
 
 // get user by email
 export const getUserByEmail = async (email) => {
@@ -96,6 +98,38 @@ export const createEmailLink = (email, token) => {
   // return `http://localhost:5000/api/v1/auth/verify-email/?token=${token}&email=${encodedEmail}`;
 };
 
+// create reset password link
+export const createResetPasswordLink = async (userId) => {
+  const randomToken = crypto.randomBytes(32).toString("hex");
+  let hashToken = crypto.createHash("sha256").update(randomToken).digest("hex");
+
+  await db
+    .delete(passwordResetTokensTable)
+    .where(eq(passwordResetTokensTable.userId, userId));
+  await db
+    .insert(passwordResetTokensTable)
+    .values({ userId, tokenHash: hashToken });
+
+  return `http://localhost:5000/api/v1/auth/reset-password/${randomToken}`;
+};
+
+// verify reset password token
+export const verifyHashResetPassword = async (token) => {
+  const hashToken = crypto.createHash("sha256").update(token).digest("hex");
+
+  const [validate] = await db
+    .select()
+    .from(passwordResetTokensTable)
+    .where(
+      and(
+        eq(passwordResetTokensTable.tokenHash, hashToken),
+        gte(passwordResetTokensTable.expiresAt, sql`(CURRENT_TIMESTAMP)`)
+      )
+    );
+
+  return validate;
+};
+
 // find verify email token
 export const findVerificationEmailToken = async (email, token) => {
   return await db
@@ -134,6 +168,13 @@ export const clearTokensTable = (userId) => {
   return db
     .delete(verifyEmailTokensTable)
     .where(eq(verifyEmailTokensTable.userId, userId));
+};
+
+// clear password reset tokens table
+export const clearResetPasswordToken = (userId) => {
+  return db
+    .delete(passwordResetTokensTable)
+    .where(eq(passwordResetTokensTable.userId, userId));
 };
 
 // create login session

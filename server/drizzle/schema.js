@@ -32,6 +32,19 @@ export const usersTable = mysqlTable("users", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
+// password reset tokens table
+export const passwordResetTokensTable = mysqlTable("password_reset_tokens", {
+  id: int().autoincrement().primaryKey(),
+  userId: int()
+    .notNull()
+    .references(() => usersTable.id, { onDelete: "cascade" }),
+  tokenHash: text().notNull(),
+  expiresAt: timestamp("expires_at")
+    .default(sql`(CURRENT_TIMESTAMP + INTERVAL 1 HOUR)`)
+    .notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // session table
 export const sessionsTable = mysqlTable("sessions", {
   id: int().autoincrement().primaryKey(),

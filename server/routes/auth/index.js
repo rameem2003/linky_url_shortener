@@ -5,9 +5,12 @@ import {
   login,
   logout,
   register,
+  resetPassword,
   sendEmailForVerification,
+  sendResetPasswordEmail,
   updateUserPassword,
   verifyEmailToken,
+  verifyResetPasswordToken,
 } from "./../../controllers/auth.controller.js";
 
 const router = Router();
@@ -19,6 +22,9 @@ router.patch("/auth/update-username", editProfile);
 router.patch("/auth/update-password", updateUserPassword);
 router.post("/auth/send-verification-email", sendEmailForVerification);
 router.get("/auth/verify-email", verifyEmailToken);
+router.post("/auth/reset-password", sendResetPasswordEmail);
+router.get("/auth/reset-password/:token", verifyResetPasswordToken);
+router.post("/auth/reset-password/:token", resetPassword);
 router.post("/auth/logout", logout);
 
 export const authRouter = router;

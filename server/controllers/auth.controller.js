@@ -1,8 +1,10 @@
 import {
   authenticateUser,
+  clearResetPasswordToken,
   clearTokensTable,
   clearUserSession,
   createEmailLink,
+  createResetPasswordLink,
   createUser,
   findUserAndUpdateEmailValidation,
   findUserAndUpdateName,
@@ -13,14 +15,17 @@ import {
   hashPassword,
   insertRandomCode,
   updatePassword,
+  verifyHashResetPassword,
   verifyPassword,
 } from "../services/auth.service.js";
 import { getAllLinks } from "./../services/links.service.js";
 import {
   loginUserSchema,
   registerUserSchema,
+  resetPasswordSchema,
   verifyEmailTokenSchema,
   verifyPasswordSchema,
+  verifyUserEmailSchema,
   verifyUserNameSchema,
 } from "../validator/auth.validator.js";
 import { sendEmail } from "../utils/sendEmail.js";
@@ -219,6 +224,68 @@ export const verifyEmailToken = async (req, res) => {
   await findUserAndUpdateEmailValidation(validate.email);
   await clearTokensTable(validate.userId);
   res.status(200).json({ success: true, msg: "Email verified successfully" });
+};
+
+// reset password
+export const sendResetPasswordEmail = async (req, res) => {
+  const { data, error } = verifyUserEmailSchema.safeParse(req.body);
+
+  if (error) {
+    return res
+      .status(400)
+      .json({ success: false, msg: error.errors[0].message });
+  }
+
+  const user = await getUserByEmail(data.email);
+
+  if (user) {
+    let resetPasswordLink = await createResetPasswordLink(user.id);
+
+    let emailBody = `
+      <p>Click the link below to reset your password:</p>
+      <a href="${resetPasswordLink}">${resetPasswordLink}</a> or copy and paste it this code <b>${resetPasswordLink}</b> into your browser.`;
+
+    await sendEmail(user.email, "Password Reset", emailBody);
+    res.status(200).json({ success: true, data: resetPasswordLink });
+  } else {
+    return res.status(404).json({ success: false, msg: "User not found" });
+  }
+};
+
+export const verifyResetPasswordToken = async (req, res) => {
+  const { token } = req.params;
+
+  const passwordResetData = await verifyHashResetPassword(token);
+
+  if (!passwordResetData) {
+    return res.status(400).json({ success: false, msg: "Invalid token" });
+  }
+
+  res.status(200).json({ success: true, msg: "Token is valid" });
+};
+
+export const resetPassword = async (req, res) => {
+  const { token } = req.params;
+
+  const passwordResetData = await verifyHashResetPassword(token);
+
+  if (!passwordResetData) {
+    return res.status(400).json({ success: false, msg: "Invalid token" });
+  }
+
+  const { data, error } = resetPasswordSchema.safeParse(req.body);
+
+  if (error) {
+    return res
+      .status(400)
+      .json({ success: false, msg: error.errors[0].message });
+  }
+
+  await clearResetPasswordToken(passwordResetData.userId);
+
+  await updatePassword(passwordResetData.userId, data.newPassword);
+
+  res.status(200).json({ success: true, msg: "Password reset successfully" });
 };
 
 // logout user
