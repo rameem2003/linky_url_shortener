@@ -2,6 +2,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import db from "../config/db.js";
 import {
+  oauthAccountsTable,
   passwordResetTokensTable,
   sessionsTable,
   usersTable,
@@ -12,7 +13,7 @@ import {
   MILLISECONDS_PER_SECOND,
   REFRESH_TOKEN_EXPIRY,
 } from "../config/constants.js";
-import { and, eq, gte, lt, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import crypto from "crypto";
 
 // get user by email
@@ -287,3 +288,87 @@ export const authenticateUser = async ({ req, res, user, name, email }) => {
     maxAge: REFRESH_TOKEN_EXPIRY,
   });
 };
+
+// get user by oauth
+export const getUserByOauth = async (provider, email) => {
+  const [user] = await db
+    .select({
+      id: usersTable.id,
+      name: usersTable.name,
+      email: usersTable.email,
+      isEmailValid: usersTable.isEmailValid,
+      providerAccountId: oauthAccountsTable.providerAccountId,
+      provider: oauthAccountsTable.provider,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.email, email))
+    .leftJoin(
+      oauthAccountsTable,
+      and(
+        eq(oauthAccountsTable.provider, provider),
+        eq(oauthAccountsTable.userId, usersTable.id)
+      )
+    );
+
+  return user;
+};
+
+// link the user with oauth
+export async function linkUserWithOauth(
+  userId,
+  provider,
+  providerAccountId,
+  avatarUrl
+) {
+  await db.insert(oauthAccountsTable).values({
+    userId,
+    provider,
+    providerAccountId,
+  });
+
+  if (avatarUrl) {
+    await db
+      .update(usersTable)
+      .set({ avatarUrl })
+      .where(and(eq(usersTable.id, userId), isNull(usersTable.avatarUrl)));
+  }
+}
+
+// create user with oauth
+export async function createUserWithOauth(
+  name,
+  email,
+  provider,
+  providerAccountId,
+  avatarUrl
+) {
+  const user = await db.transaction(async (trx) => {
+    const [user] = await trx
+      .insert(usersTable)
+      .values({
+        email,
+        name,
+        // password: "",
+        avatarUrl,
+        isEmailValid: true, // we know that google's email are valid
+      })
+      .$returningId();
+
+    await trx.insert(oauthAccountsTable).values({
+      provider,
+      providerAccountId,
+      userId: user.id,
+    });
+
+    return {
+      id: user.id,
+      name,
+      email,
+      isEmailValid: true, // not necessary
+      provider,
+      providerAccountId,
+    };
+  });
+
+  return user;
+}

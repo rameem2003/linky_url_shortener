@@ -2,6 +2,7 @@ import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   int,
+  mysqlEnum,
   mysqlTable,
   text,
   timestamp,
@@ -18,6 +19,16 @@ export const shortLinksTable = mysqlTable("short_link", {
   userId: int()
     .notNull()
     .references(() => usersTable.id),
+});
+
+export const oauthAccountsTable = mysqlTable("oauth_accounts_table", {
+  id: int().autoincrement().primaryKey(),
+  userId: int()
+    .notNull()
+    .references(() => usersTable.id, { onDelete: "cascade" }),
+  provider: mysqlEnum(["google", "github"]).notNull(),
+  providerAccountId: varchar({ length: 255 }).unique().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // users table

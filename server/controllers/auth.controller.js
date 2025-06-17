@@ -1,3 +1,4 @@
+import { decodeIdToken, generateCodeVerifier, generateState } from "arctic";
 import {
   authenticateUser,
   clearResetPasswordToken,
@@ -6,14 +7,17 @@ import {
   createEmailLink,
   createResetPasswordLink,
   createUser,
+  createUserWithOauth,
   findUserAndUpdateEmailValidation,
   findUserAndUpdateName,
   findUserById,
   findVerificationEmailToken,
   generateRandomCode,
   getUserByEmail,
+  getUserByOauth,
   hashPassword,
   insertRandomCode,
+  linkUserWithOauth,
   updatePassword,
   verifyHashResetPassword,
   verifyPassword,
@@ -29,6 +33,8 @@ import {
   verifyUserNameSchema,
 } from "../validator/auth.validator.js";
 import { sendEmail } from "../utils/sendEmail.js";
+import { OAUTH_EXCHANGE_EXPIRY } from "../config/constants.js";
+import { google } from "../utils/oauth/google.js";
 
 // register
 export const register = async (req, res) => {
@@ -79,6 +85,13 @@ export const login = async (req, res) => {
 
   if (!user) {
     return res.status(400).json({ success: false, msg: "Invalid Credentials" });
+  }
+
+  if (!user.password) {
+    return res.status(400).json({
+      success: false,
+      msg: "You probably logged in with Google, Try with google login",
+    });
   }
 
   const isPasswordValid = await verifyPassword(data.password, user.password);
@@ -252,6 +265,7 @@ export const sendResetPasswordEmail = async (req, res) => {
   }
 };
 
+// verify reset password token
 export const verifyResetPasswordToken = async (req, res) => {
   const { token } = req.params;
 
@@ -264,6 +278,7 @@ export const verifyResetPasswordToken = async (req, res) => {
   res.status(200).json({ success: true, msg: "Token is valid" });
 };
 
+// reset password
 export const resetPassword = async (req, res) => {
   const { token } = req.params;
 
@@ -286,6 +301,88 @@ export const resetPassword = async (req, res) => {
   await updatePassword(passwordResetData.userId, data.newPassword);
 
   res.status(200).json({ success: true, msg: "Password reset successfully" });
+};
+
+// oauth google
+export const oauthGoogle = async (req, res) => {
+  if (req.user) {
+    return res.redirect("/");
+  }
+
+  const state = generateState();
+  const codeVerifier = generateCodeVerifier();
+  const scopes = ["openid", "profile", "email"];
+  const url = google.createAuthorizationURL(state, codeVerifier, scopes);
+
+  const cookieConfig = {
+    httpOnly: true,
+    secure: true,
+    maxAge: OAUTH_EXCHANGE_EXPIRY,
+    sameSite: "lax",
+  };
+
+  res.cookie("google_oauth_state", state, cookieConfig);
+  res.cookie("google_code_verifier", codeVerifier, cookieConfig);
+
+  res.redirect(url.toString());
+};
+
+// google login callback
+export const googleLoginCallback = async (req, res) => {
+  const { code, state } = req.query;
+
+  const { google_oauth_state, google_code_verifier } = req.cookies;
+
+  if (
+    !code ||
+    !state ||
+    !google_oauth_state ||
+    !google_code_verifier ||
+    state !== google_oauth_state
+  ) {
+    return res
+      .status(400)
+      .json({ success: false, msg: "Invalid google login attempt" });
+  }
+
+  let token;
+  try {
+    token = await google.validateAuthorizationCode(code, google_code_verifier);
+  } catch (error) {
+    return res
+      .status(400)
+      .json({ success: false, msg: "Invalid google login attempt" });
+  }
+
+  const claims = decodeIdToken(token.idToken());
+
+  const { googleUserId, name, email, picture } = claims;
+
+  // condition 1 : User already exists with oauth link
+  // condition 2 : User already exists with same email buu not google o auth link
+  // condition 3 : User does not exist
+
+  let user = await getUserByOauth("google", email);
+
+  if (user && !user.providerAccountId) {
+    await linkUserWithOauth(user.id, "google", googleUserId, picture);
+  }
+
+  if (!user) {
+    user = await createUserWithOauth(
+      name,
+      email,
+      "google",
+      googleUserId,
+      picture
+    );
+  }
+
+  await authenticateUser({ req, res, user, name, email });
+
+  return res
+    .status(200)
+    .json({ success: true, msg: "User Google logged in successfully" });
 };
 
 // logout user

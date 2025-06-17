@@ -2,8 +2,10 @@ import { Router } from "express";
 import {
   editProfile,
   getUserProfile,
+  googleLoginCallback,
   login,
   logout,
+  oauthGoogle,
   register,
   resetPassword,
   sendEmailForVerification,
@@ -25,6 +27,8 @@ router.get("/auth/verify-email", verifyEmailToken);
 router.post("/auth/reset-password", sendResetPasswordEmail);
 router.get("/auth/reset-password/:token", verifyResetPasswordToken);
 router.post("/auth/reset-password/:token", resetPassword);
+router.get("/auth/google", oauthGoogle);
+router.get("/auth/google/callback", googleLoginCallback);
 router.post("/auth/logout", logout);
 
 export const authRouter = router;
