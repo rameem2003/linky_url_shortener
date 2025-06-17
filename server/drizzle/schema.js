@@ -27,7 +27,7 @@ export const oauthAccountsTable = mysqlTable("oauth_accounts_table", {
     .notNull()
     .references(() => usersTable.id, { onDelete: "cascade" }),
   provider: mysqlEnum(["google", "github"]).notNull(),
-  providerAccountId: varchar({ length: 255 }).unique().notNull(),
+  providerAccountId: varchar({ length: 150 }).unique().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
